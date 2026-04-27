@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Document": {
+      "title": "Uploaded Document",
+      "description": "Information and text content of a PDF or Word file uploaded by the user.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The name of the file." },
+        "content": { "type": "string", "description": "The extracted text content from the file." },
+        "type": { "type": "string", "enum": ["pdf", "docx"], "description": "The type of document." },
+        "uploadedBy": { "type": "string", "description": "The UID of the user who uploaded the document." },
+        "uploadedByEmail": { "type": "string", "description": "The email of the user who uploaded the document." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "type", "uploadedBy", "createdAt", "updatedAt"]
+    },
+    "ChatSession": {
+      "title": "AI Chat Session",
+      "description": "A conversation between a user and the Gemini AI.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user." },
+        "lastMessage": { "type": "string", "description": "Snippet of the last message." },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "updatedAt", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "An individual message in a chat session.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "text", "timestamp"]
+    },
+    "Notification": {
+      "title": "System Notification",
+      "description": "A notification for the user (e.g., when a document is added/updated).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/documents/{documentId}": {
+      "schema": "Document",
+      "description": "Global documents available for AI search."
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "User chat sessions."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within a specific chat session."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "In-app notifications for users."
+    }
+  }
+}

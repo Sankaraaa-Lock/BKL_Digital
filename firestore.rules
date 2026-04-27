@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    function isValidDocument(data) {
+      return data.keys().hasAll(['title', 'content', 'type', 'uploadedBy', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 6 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.content is string && data.content.size() <= 100000 &&
+             data.type in ['pdf', 'docx'] &&
+             data.uploadedBy == request.auth.uid &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidChatSession(data) {
+      return data.keys().hasAll(['userId', 'lastMessage', 'updatedAt', 'createdAt']) &&
+             data.keys().size() == 4 &&
+             data.userId == request.auth.uid &&
+             data.lastMessage is string && data.lastMessage.size() <= 500 &&
+             data.updatedAt == request.time &&
+             data.createdAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['role', 'text', 'timestamp']) &&
+             data.keys().size() == 3 &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() <= 5000 &&
+             data.timestamp == request.time;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+             data.keys().size() == 6 &&
+             data.userId is string &&
+             data.title is string && data.title.size() <= 100 &&
+             data.message is string && data.message.size() <= 500 &&
+             data.type in ['info', 'success', 'warning'] &&
+             data.read is bool &&
+             data.createdAt == request.time;
+    }
+
+    // Collection Security
+
+    // Documents: Global read for verified users, write only for matching UID
+    match /documents/{docId} {
+      allow read: if isVerified();
+      allow create: if isVerified() && isValidId(docId) && isValidDocument(incoming());
+      allow update: if isVerified() && isOwner(existing().uploadedBy) &&
+                    isValidDocument(incoming()) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'updatedAt']);
+      allow delete: if isVerified() && isOwner(existing().uploadedBy);
+    }
+
+    // Chat Sessions: Private to the user
+    match /chats/{chatId} {
+      allow list: if isVerified() && resource.data.userId == request.auth.uid;
+      allow get: if isVerified() && resource.data.userId == request.auth.uid;
+      allow create: if isVerified() && isValidId(chatId) && isValidChatSession(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) &&
+                    incoming().userId == existing().userId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+      allow delete: if isVerified() && isOwner(existing().userId);
+
+      // Chat Messages: Subcollection
+      match /messages/{msgId} {
+        allow read: if isVerified() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        allow create: if isVerified() && isValidId(msgId) &&
+                      get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid &&
+                      isValidChatMessage(incoming());
+      }
+    }
+
+    // Notifications: Private to the user
+    match /notifications/{notifId} {
+      allow list: if isVerified() && resource.data.userId == request.auth.uid;
+      allow get: if isVerified() && resource.data.userId == request.auth.uid;
+      allow create: if isVerified() && isValidId(notifId) && incoming().userId == request.auth.uid && isValidNotification(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isVerified() && isOwner(existing().userId);
+    }
+  }
+}
