@@ -9,16 +9,28 @@ import { cn } from '../lib/utils';
 const Landing = ({ user }: { user: FirebaseUser | null }) => {
   const navigate = useNavigate();
 
+  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+
   const handleStart = async () => {
     if (user) {
       navigate('/dashboard');
-    } else {
-      try {
-        await signInWithPopup(auth, googleProvider);
-        navigate('/dashboard');
-      } catch (err) {
+      return;
+    }
+    
+    if (isLoggingIn) return;
+
+    setIsLoggingIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      navigate('/dashboard');
+    } catch (err: any) {
+      if (err.code === 'auth/popup-blocked') {
+        alert("Popup login terblokir oleh browser. Silakan izinkan popup untuk situs ini dan coba lagi.");
+      } else if (err.code !== 'auth/cancelled-popup-request') {
         console.error("Auth error", err);
       }
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 

@@ -18,11 +18,15 @@ import {
   query, 
   serverTimestamp,
   deleteDoc,
-  getDocs
+  getDocs,
+  doc,
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 import { chatWithAI } from '../services/ai';
 import { cn } from '../lib/utils';
+import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 import ReactMarkdown from 'react-markdown';
 
 const ChatAI = () => {
@@ -35,10 +39,29 @@ const ChatAI = () => {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    // For this simple version, we'll use a single chat session per user 
-    // or just listen to all for now. In production, we'd manage specific chatIds.
+    const userId = auth.currentUser.uid;
+    const chatRef = doc(db, 'chats', userId);
+    
+    // Ensure chat session document exists for the user
+    const ensureChatSession = async () => {
+      try {
+        const docSnap = await getDoc(chatRef);
+        if (!docSnap.exists()) {
+          await setDoc(chatRef, {
+            userId: userId,
+            lastMessage: "Sesi dimulai",
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `chats/${userId}`);
+      }
+    };
+    ensureChatSession();
+
     const q = query(
-      collection(db, `chats/global/messages`), // Simple global-user path
+      collection(db, `chats/${userId}/messages`),
       orderBy('timestamp', 'asc')
     );
 
@@ -48,6 +71,8 @@ const ChatAI = () => {
         ...d.data()
       }));
       setMessages(msgs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `chats/${userId}/messages`);
     });
 
     return () => unsubscribe();
@@ -70,12 +95,21 @@ const ChatAI = () => {
       setIsTyping(true);
 
       // Save user message to Firestore
-      await addDoc(collection(db, `chats/global/messages`), {
+      const userId = auth.currentUser.uid;
+      const messagesRef = collection(db, `chats/${userId}/messages`);
+      
+      await addDoc(messagesRef, {
         role: 'user',
         text: userText,
-        uid: auth.currentUser.uid,
         timestamp: serverTimestamp()
       });
+
+      // Update parent session
+      await setDoc(doc(db, 'chats', userId), {
+        userId: userId,
+        lastMessage: userText.substring(0, 500),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
 
       // Get AI response
       const history = messages.map(m => ({ role: m.role as 'user' | 'model', text: m.text }));
@@ -84,14 +118,14 @@ const ChatAI = () => {
       const aiResponse = await chatWithAI(history);
 
       // Save AI message to Firestore
-      await addDoc(collection(db, `chats/global/messages`), {
+      await addDoc(messagesRef, {
         role: 'model',
         text: aiResponse,
         timestamp: serverTimestamp()
       });
 
     } catch (err) {
-      console.error("Chat error", err);
+      handleFirestoreError(err, OperationType.WRITE, `chats/${auth.currentUser?.uid}/messages`);
     } finally {
       setIsTyping(false);
     }
@@ -99,79 +133,80 @@ const ChatAI = () => {
 
   const clearChat = async () => {
     if (!window.confirm("Hapus seluruh riwayat percakapan?")) return;
-    const q = query(collection(db, `chats/global/messages`));
-    const snapshot = await getDocs(q);
-    snapshot.docs.forEach(async (d) => {
-      await deleteDoc(d.ref);
-    });
+    if (!auth.currentUser) return;
+    
+    const userId = auth.currentUser.uid;
+    const q = query(collection(db, `chats/${userId}/messages`));
+    try {
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map((d) => deleteDoc(d.ref));
+      await Promise.all(deletePromises);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `chats/${userId}/messages`);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 h-[calc(100vh-120px)] flex flex-col py-6 relative z-10">
-      <header className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl rounded-b-none border-b-0 p-6 flex items-center justify-between border-white/5">
-        <div className="flex items-center space-x-4">
-          <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
-            <Bot className="h-6 w-6" />
+    <div className="max-w-4xl mx-auto h-[calc(100vh-160px)] flex flex-col bg-white/5 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl backdrop-blur-3xl">
+      <header className="p-8 border-b border-white/10 flex items-center justify-between bg-white/5">
+        <div className="flex items-center space-x-5">
+          <div className="h-14 w-14 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-blue-500/30">
+            <Bot className="text-white h-7 w-7" />
           </div>
           <div>
-            <h2 className="font-bold text-white text-lg tracking-tight">Kreo Virtual Concierge</h2>
-            <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Live Assistant Agent</span>
-            </div>
+            <h2 className="font-bold text-2xl tracking-tighter">Diskusi Pintar</h2>
+            <p className="text-[10px] text-blue-400 mt-1 font-bold uppercase tracking-widest animate-pulse">Neural Assistant Agent</p>
           </div>
         </div>
         <button 
           onClick={clearChat}
-          className="p-3 text-slate-500 hover:text-white transition-colors bg-white/10 border border-white/10 backdrop-blur-md hover:bg-white/20 transition-all active:scale-95 rounded-xl"
-          title="Hapus Percakapan"
+          className="p-4 text-slate-500 hover:text-white transition-colors bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 group"
+          title="Bersihkan Percakapan"
         >
-          <RotateCcw className="h-4 w-4" />
+          <RotateCcw className="h-5 w-5 group-hover:rotate-[-45deg] transition-transform" />
         </button>
       </header>
 
       <div 
         ref={scrollRef}
-        className="flex-1 bg-white/5 border-x border-white/10 overflow-y-auto p-8 space-y-8 scroll-smooth"
+        className="flex-1 overflow-y-auto p-10 space-y-12 scrollbar-hide"
       >
         {messages.length === 0 && !isTyping && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-20 px-10">
-            <div className="h-24 w-24 bg-white/5 rounded-[2rem] flex items-center justify-center mb-8 border border-white/10 shadow-inner">
-               <Sparkles className="h-10 w-10 text-blue-400" />
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-8 opacity-40">
+            <div className="h-24 w-24 bg-white/5 rounded-[2.5rem] flex items-center justify-center border border-white/10">
+               <Sparkles className="h-10 w-10 text-blue-500/50" />
             </div>
-            <h3 className="text-3xl font-extrabold text-white tracking-tight">Halo! Saya Asisten Pintar Anda</h3>
-            <p className="text-slate-400 mt-4 max-w-sm font-light leading-relaxed">
-              Tanyakan apa saja seputar kebijakan, alur kerja, atau data operasional BPR Kreo Lestari.
-            </p>
+            <div className="space-y-4">
+              <h3 className="text-4xl font-bold tracking-tighter text-white">Butuh Bantuan?</h3>
+              <p className="text-slate-500 max-w-sm mx-auto font-medium text-lg">Tanyakan tentang prosedur operasional, draf dokumen, atau analisis data internal Anda.</p>
+            </div>
           </div>
         )}
 
         {messages.map((m) => (
           <motion.div 
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             key={m.id} 
             className={cn(
-              "flex w-full mb-6",
+              "flex w-full group",
               m.role === 'user' ? "justify-end" : "justify-start"
             )}
           >
             <div className={cn(
-              "max-w-[85%] sm:max-w-[70%] flex flex-col",
-              m.role === 'user' ? "items-end" : "items-start"
+              "max-w-[85%] p-8 rounded-[2.5rem] relative shadow-2xl border",
+              m.role === 'user' 
+                ? "bg-blue-600 text-white rounded-tr-none border-blue-400/20 shadow-blue-500/20" 
+                : "bg-white/5 text-slate-200 rounded-tl-none border-white/10 backdrop-blur-md"
             )}>
-              <div className={cn(
-                "p-5 rounded-3xl relative shadow-2xl backdrop-blur-md border",
-                m.role === 'user' 
-                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-tr-none border-blue-400/20" 
-                  : "bg-white/10 text-slate-200 rounded-tl-none border-white/10"
-              )}>
-                <div className="prose prose-invert prose-sm max-w-none markdown-body font-light leading-relaxed">
-                   <ReactMarkdown>{m.text}</ReactMarkdown>
-                </div>
+              <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-p:text-xl font-medium">
+                 <ReactMarkdown>{m.text}</ReactMarkdown>
               </div>
-              <span className="text-[9px] text-slate-500 mt-2 uppercase font-bold tracking-[0.2em] px-2">
-                {m.role === 'user' ? 'Internal Staff' : 'AI Assistant Agent'}
+              <span className={cn(
+                "absolute bottom-[-2rem] opacity-0 group-hover:opacity-100 transition-opacity text-[10px] uppercase tracking-widest font-extrabold text-slate-600 px-6",
+                m.role === 'user' ? "right-0" : "left-0"
+              )}>
+                {m.role === 'user' ? 'Internal Staff' : 'SintesaAI Intelligence'}
               </span>
             </div>
           </motion.div>
@@ -179,29 +214,34 @@ const ChatAI = () => {
 
         {isTyping && (
           <div className="flex justify-start">
-            <div className="bg-white/5 border border-white/10 p-5 rounded-3xl rounded-tl-none shadow-xl flex items-center space-x-3 backdrop-blur-md">
-              <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Memproses respon anda...</span>
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] rounded-tl-none shadow-xl flex items-center space-x-6 backdrop-blur-3xl">
+              <div className="flex space-x-2">
+                <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" />
+              </div>
+              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-[0.3em]">Processing Logic...</span>
             </div>
           </div>
         )}
       </div>
 
-      <footer className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl rounded-t-none border-t-0 p-8 border-white/5">
-        <form onSubmit={handleSend} className="relative flex items-center space-x-4">
+      <footer className="p-8 bg-white/5 border-t border-white/10">
+        <form onSubmit={handleSend} className="relative group">
           <input 
             type="text" 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isTyping}
-            placeholder="Tanyakan sesuatu..."
-            className="flex-1 px-8 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-blue-500/30 focus:bg-white/10 transition-all outline-none text-white placeholder-slate-500 font-medium"
+            placeholder="Tulis pesan atau pertanyaan Anda..."
+            className="w-full bg-white/5 border border-white/10 focus:border-blue-500 focus:bg-white/10 outline-none p-8 rounded-[2.5rem] transition-all pr-32 text-2xl font-semibold placeholder:text-slate-800"
           />
           <button 
+            type="submit"
             disabled={!input.trim() || isTyping}
-            className="p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl hover:shadow-2xl hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute right-4 top-4 bottom-4 px-12 bg-blue-600 hover:bg-blue-700 text-white rounded-[1.8rem] transition-all shadow-2xl shadow-blue-500/40 flex items-center justify-center disabled:opacity-50 disabled:scale-95"
           >
-            <Send className="h-6 w-6" />
+            <Send className="h-8 w-8" />
           </button>
         </form>
       </footer>

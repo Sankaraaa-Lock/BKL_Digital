@@ -7,12 +7,15 @@ import {
   MessageCircle,
   ArrowRight,
   Clock,
-  Search
+  Search,
+  MessageSquare,
+  Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { collection, query, limit, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { cn } from '../lib/utils';
+import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 
 const Home = () => {
   const [stats, setStats] = useState({
@@ -28,6 +31,8 @@ const Home = () => {
 
     const unsubDocs = onSnapshot(collection(db, 'documents'), (snapshot) => {
       setStats(prev => ({ ...prev, totalDocs: snapshot.size }));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'documents');
     });
     
     // In a real app we'd fetch specific user's chat count
@@ -38,6 +43,8 @@ const Home = () => {
         type: 'upload'
       }));
       setStats(prev => ({ ...prev, recentActivity: activities }));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'documents');
     });
 
     return () => {
@@ -47,110 +54,113 @@ const Home = () => {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
-      <header className="mb-12">
-        <h1 className="text-4xl font-extrabold text-white tracking-tight">Dashboard Overview</h1>
-        <p className="text-slate-400 mt-2 font-light">Pantau dokumen dan interaksi AI Anda secara real-time.</p>
+    <div className="space-y-16 py-8">
+      <header className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8 }}
+        >
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-white">
+            Pusat <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-emerald-400">Kendali AI</span>.
+          </h1>
+          <p className="text-slate-400 text-lg md:text-xl font-medium max-w-2xl mt-6 leading-relaxed">
+            Asisten cerdas Anda siap mengolah data operasional, prosedur perbankan, dan dokumen arsip secara instan.
+          </p>
+        </motion.div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        <StatCard 
-          title="Dokumen Terunggah" 
-          value={stats.totalDocs.toString()} 
-          icon={FileCheck} 
-          trend="+5 minggu ini"
-          color="blue"
-        />
-        <StatCard 
-          title="Percakapan AI" 
-          value="12" 
-          icon={MessageCircle} 
-          trend="Aktif"
-          color="indigo"
-        />
-        <StatCard 
-          title="Akurasi Search" 
-          value="98%" 
-          icon={TrendingUp} 
-          trend="Stabil"
-          color="emerald"
-        />
-        <StatCard 
-          title="Pengguna Aktif" 
-          value="8" 
-          icon={Users} 
-          trend="Online"
-          color="orange"
-        />
+      {/* Primary Actions Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link to="/chat" className="group relative p-1 leading-none flex items-center">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[2.5rem] blur opacity-25 group-hover:opacity-60 transition duration-1000 group-hover:duration-200"></div>
+          <div className="relative w-full h-full bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 flex flex-col justify-between hover:border-blue-500/50 transition-all duration-500 overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                <MessageCircle className="h-24 w-24" />
+             </div>
+             <div className="h-12 w-12 bg-blue-600/20 rounded-2xl flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+                <MessageSquare className="h-6 w-6" />
+             </div>
+             <div className="mt-16">
+               <h3 className="text-2xl font-bold text-white mb-2">Diskusi Pintar</h3>
+               <p className="text-sm text-slate-500 font-medium leading-snug">Tanyakan tentang prosedur, kebijakan, atau buat draft dokumen perbankan.</p>
+             </div>
+          </div>
+        </Link>
+
+        <Link to="/search" className="group relative p-1 leading-none flex items-center">
+          <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-cyan-600 rounded-[2.5rem] blur opacity-25 group-hover:opacity-60 transition duration-1000 group-hover:duration-200"></div>
+          <div className="relative w-full h-full bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 flex flex-col justify-between hover:border-emerald-500/50 transition-all duration-500 overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                <Search className="h-24 w-24" />
+             </div>
+             <div className="h-12 w-12 bg-emerald-600/20 rounded-2xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                <Search className="h-6 w-6" />
+             </div>
+             <div className="mt-16">
+               <h3 className="text-2xl font-bold text-white mb-2">Pencarian AI</h3>
+               <p className="text-sm text-slate-500 font-medium leading-snug">Temukan data spesifik di ribuan halaman arsip dokumen Anda secara instan.</p>
+             </div>
+          </div>
+        </Link>
+
+        <Link to="/documents" className="group relative p-1 leading-none flex items-center">
+          <div className="absolute -inset-1 bg-gradient-to-r from-amber-600 to-orange-600 rounded-[2.5rem] blur opacity-25 group-hover:opacity-60 transition duration-1000 group-hover:duration-200"></div>
+          <div className="relative w-full h-full bg-slate-900 border border-white/10 rounded-[2.5rem] p-8 flex flex-col justify-between hover:border-amber-500/50 transition-all duration-500 overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                <FileCheck className="h-24 w-24" />
+             </div>
+             <div className="h-12 w-12 bg-amber-600/20 rounded-2xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                <FileCheck className="h-6 w-6" />
+             </div>
+             <div className="mt-16">
+               <h3 className="text-2xl font-bold text-white mb-2">Kelola Arsip</h3>
+               <p className="text-sm text-slate-500 font-medium leading-snug">Unggah dokumen baru, verifikasi status, dan atur repositori pengetahuan Anda.</p>
+             </div>
+          </div>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/5 border border-white/5 backdrop-blur-xl rounded-3xl shadow-2xl p-10">
-            <h3 className="text-2xl font-bold mb-8 flex items-center space-x-3 text-white">
-              <Clock className="h-6 w-6 text-blue-400" />
-              <span>Aktivitas Terbaru</span>
-            </h3>
-            <div className="space-y-4">
-              {stats.recentActivity.length === 0 ? (
-                <p className="text-slate-500 text-center py-12 italic font-light">Belum ada aktivitas dokumen.</p>
-              ) : stats.recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 hover:bg-white/10 transition-all cursor-pointer group">
-                  <div className="flex items-center space-x-5">
-                    <div className="h-12 w-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/20 group-hover:scale-110 transition-transform">
-                      <FileCheck className="h-6 w-6 text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white text-lg">{activity.title}</p>
-                      <p className="text-xs text-slate-500 font-medium">Diunggah oleh: {activity.uploadedByEmail}</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-3 py-1 rounded-full uppercase tracking-widest">{activity.type}</span>
-                </div>
-              ))}
-            </div>
-            {stats.recentActivity.length > 0 && (
-              <Link to="/documents" className="mt-10 flex items-center justify-center space-x-2 text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors py-4 rounded-xl border border-dashed border-white/10 hover:border-blue-400/50">
-                <span>Lihat Semua Dokumen</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            )}
+      {/* Activity Timeline Simplified */}
+      <div className="bg-white/5 border border-white/10 rounded-[3rem] p-10 md:p-16 relative overflow-hidden backdrop-blur-3xl shadow-2xl">
+        <div className="flex items-center justify-between mb-12">
+          <div className="flex items-center space-x-4">
+             <div className="h-12 w-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
+                <Clock className="h-6 w-6 text-slate-400" />
+             </div>
+             <h2 className="text-3xl font-bold text-white tracking-tight">Timeline Kerja</h2>
           </div>
+          <Link to="/documents" className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest border-b border-blue-500/30 pb-1">Lihat Semua</Link>
         </div>
 
-        {/* Quick Links */}
         <div className="space-y-6">
-          <div className="bg-gradient-to-br from-blue-600/80 to-indigo-700/80 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-[-20%] right-[-10%] w-40 h-40 bg-white/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold mb-4">Butuh Bantuan?</h3>
-              <p className="text-blue-100 text-sm mb-10 leading-relaxed font-light">
-                Tanyakan apapun kepada asisten AI kami seputar dokumen dan prosedur BPR.
-              </p>
-              <Link 
-                to="/chat" 
-                className="inline-flex items-center space-x-3 px-8 py-4 bg-white text-blue-700 rounded-2xl text-sm font-bold hover:shadow-2xl transition-all active:scale-95"
+          {stats.recentActivity.length > 0 ? (
+            stats.recentActivity.map((activity, i) => (
+              <motion.div 
+                key={activity.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="flex items-center justify-between p-6 bg-white/5 border border-white/5 rounded-3xl hover:bg-white/10 hover:border-white/20 transition-all group"
               >
-                <span>Mulai Chat AI</span>
-                <MessageCircle className="h-5 w-5" />
-              </Link>
-            </div>
-          </div>
-
-          <div className="bg-white/5 border border-white/5 backdrop-blur-xl rounded-3xl shadow-2xl p-10">
-            <h3 className="text-xl font-bold mb-4 text-white">Cari Informasi</h3>
-            <p className="text-slate-400 text-sm mb-10 leading-relaxed font-light">
-              Telusuri data dari file PDF/Word yang sudah terunggah dengan Semantic AI Search.
-            </p>
-            <Link 
-              to="/search" 
-              className="bg-white/10 border border-white/10 backdrop-blur-md hover:bg-white/20 transition-all active:scale-95 inline-flex items-center space-x-3 px-8 py-4 text-white rounded-2xl text-sm font-bold w-full justify-center"
-            >
-              <Search className="h-5 w-5 text-blue-400" />
-              <span>Akses AI Search</span>
-            </Link>
-          </div>
+                <div className="flex items-center space-x-6">
+                  <div className="h-14 w-14 bg-gradient-to-tr from-blue-600/20 to-indigo-600/20 rounded-2xl flex items-center justify-center border border-blue-500/10">
+                    <FileCheck className="h-7 w-7 text-blue-500" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">{activity.title}</h4>
+                    <p className="text-sm text-slate-500 font-medium">Internal System • AI Analytics Berhasil</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end">
+                   <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-4 py-1.5 rounded-full uppercase tracking-widest mb-1 italic">Tersimpan</span>
+                   <span className="text-[10px] text-slate-600 font-bold uppercase tracking-tighter">Hari ini</span>
+                </div>
+              </motion.div>
+            ))
+          ) : (
+            <div className="py-20 text-center opacity-40 italic font-medium text-slate-500">Timeline aktivitas masih kosong...</div>
+          )}
         </div>
       </div>
     </div>
