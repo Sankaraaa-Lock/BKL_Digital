@@ -75,7 +75,7 @@ const Navbar = ({ user, notificationCount }: { user: User | null, notificationCo
           <div className="h-10 w-10 bg-gradient-to-tr from-blue-600 to-emerald-400 rounded-2xl flex items-center justify-center shrink-0 shadow-2xl shadow-blue-500/20">
             <Zap className="h-6 w-6 text-white" />
           </div>
-          <span className="text-xl font-bold text-white tracking-tight opacity-0 group-hover/nav:opacity-100 md:opacity-100 transition-opacity whitespace-nowrap">SintesaAI</span>
+          <span className="text-xl font-bold text-white tracking-tight opacity-0 group-hover/nav:opacity-100 md:opacity-100 transition-opacity whitespace-nowrap">PT. BPR Kreo Lestari</span>
         </div>
 
         <div className="flex-1 space-y-2">
